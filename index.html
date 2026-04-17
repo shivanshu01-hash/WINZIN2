@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Winzing Exchange</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;700&family=Roboto:wght@400;500&display=swap"
+        rel="stylesheet">
+</head>
+
+<body>
+    <div class="page-container">
+        <!-- Logo Section -->
+        <header class="header">
+            <div class="logo">
+                <img src="https://sitethemedata.com/sitethemes/winzing247.live/front/logo.png" alt="Winzing Exchange"
+                    style="height: 75px; width: auto; object-fit: contain; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));">
+            </div>
+        </header>
+
+        <!-- Main Card Section -->
+        <main class="main-content">
+            <div class="login-card">
+                <h1 class="login-title">LOGIN <i class="fas fa-hand-point-down"></i></h1>
+
+                <div class="error-message" id="error-message" style="display: none;">Invalid Username or Password</div>
+
+                <form id="login-form">
+                    <div class="input-group">
+                        <input type="text" id="username" placeholder="Username" required>
+                        <span class="icon"><i class="fas fa-user"></i></span>
+                    </div>
+
+                    <div class="input-group">
+                        <input type="password" id="password" placeholder="Password" required>
+                        <span class="icon"><i class="fas fa-key"></i></span>
+                    </div>
+
+                    <button type="submit" class="login-btn">
+                        <span>Login</span>
+                        <i class="fas fa-sign-in-alt"></i>
+                    </button>
+                </form>
+
+                <div class="forgot-password">
+                    <a href="#">Forgot Password?</a>
+                </div>
+
+                <div class="register-link">
+                    <span>Don't have User?</span> <a href="#">Register here</a>
+                </div>
+
+                <div class="captcha-notice">
+                    This site is protected by reCAPTCHA and the Google <a href="#">Privacy Policy</a> and <a
+                        href="#">Terms of Service</a> apply.
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer Section -->
+        <footer class="footer">
+            <div class="footer-title">24X7 Support</div>
+            <div class="footer-phone">9151337271</div>
+            <div class="social-icons">
+                <a href="#" class="social-icon instagram"><i class="fab fa-instagram"></i></a>
+                <a href="#" class="social-icon telegram"><i class="fab fa-telegram-plane"></i></a>
+                <a href="#" class="social-icon whatsapp"><i class="fab fa-whatsapp"></i></a>
+            </div>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
