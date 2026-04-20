@@ -269,19 +269,6 @@ async function fetchLogs() {
         const data = await res.json();
         if (res.status === 401) { logout(); return; }
 
-        if (data.error === 'MISSING_DB_CONNECTION') {
-            document.getElementById('logs-body').innerHTML = `
-                <tr><td colspan="7" style="text-align:center; padding: 40px; color:#f87171;">
-                    <i class="fas fa-exclamation-triangle" style="font-size:24px; margin-bottom:12px; display:block;"></i>
-                    <strong style="font-size: 16px;">Database Connection Missing</strong><br><br>
-                    <span style="color:#94a3b8">Your Vercel Server has not loaded the Supabase integration yet.</span><br>
-                    <span style="color:#94a3b8">Wait 15-20 seconds for the new Vercel deployment to finish, then refresh the Admin Panel.</span>
-                </td></tr>
-            `;
-            document.getElementById('stat-total').textContent = 'Error';
-            return;
-        }
-
         allLogs = data.logs || [];
         renderTable(allLogs);
         updateStats(allLogs);

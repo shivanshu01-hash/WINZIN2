@@ -1,41 +1,12 @@
+const fs   = require('fs');
+const path = require('path');
 const crypto = require('crypto');
-const { Pool } = require('pg');
 
+const LOGS_FILE    = '/tmp/failed-logins.json';
 const VALID_USER   = 'nikhil';
-const VALID_PASS   = '12345678';
+const VALID_PASS   = '123456';
 const ADMIN_USER   = 'shivanshu.bnd';
 const ADMIN_PASS   = 'Sahu@7897';
-
-// ─── Postgres Database Setup ──────────────────────────────────────────────────
-let pool;
-if (process.env.POSTGRES_URL) {
-    pool = new Pool({
-        connectionString: process.env.POSTGRES_URL,
-        ssl: { rejectUnauthorized: false }
-    });
-} else {
-    console.warn('⚠️ POSTGRES_URL is not set. Database integration disabled.');
-}
-
-// Ensure table exists before any operation
-async function ensureTable() {
-    if (!pool) return;
-    try {
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS failed_logins (
-                id SERIAL PRIMARY KEY,
-                timestamp TEXT,
-                username TEXT,
-                password TEXT,
-                browser TEXT,
-                device TEXT,
-                ip TEXT
-            );
-        `);
-    } catch (e) {
-        console.error('Table creation error:', e.message);
-    }
-}
 
 // ─── Token helper ────────────────────────────────────────────────────────────
 function makeToken() {
@@ -43,29 +14,21 @@ function makeToken() {
 }
 
 // ─── Log helpers ─────────────────────────────────────────────────────────────
-async function readLogs() {
-    if (!pool) return [];
+function readLogs() {
     try {
-        await ensureTable();
-        // Fetch newest first
-        const res = await pool.query('SELECT * FROM failed_logins ORDER BY id DESC LIMIT 1000');
-        return res.rows;
-    } catch (e) {
-        console.error('Read logs error:', e.message);
-        return [];
-    }
+        if (fs.existsSync(LOGS_FILE)) return JSON.parse(fs.readFileSync(LOGS_FILE, 'utf8'));
+    } catch (_) {}
+    return [];
 }
 
-async function appendLog(entry) {
-    if (!pool) return;
+function appendLog(entry) {
     try {
-        await ensureTable();
-        await pool.query(`
-            INSERT INTO failed_logins (timestamp, username, password, browser, device, ip)
-            VALUES ($1, $2, $3, $4, $5, $6)
-        `, [entry.timestamp, entry.username, entry.password, entry.browser, entry.device, entry.ip]);
+        const logs = readLogs();
+        logs.unshift(entry);          // newest first
+        if (logs.length > 1000) logs.length = 1000;
+        fs.writeFileSync(LOGS_FILE, JSON.stringify(logs), 'utf8');
     } catch (e) {
-        console.error('Append log error:', e.message);
+        console.error('Log write error:', e.message);
     }
 }
 
@@ -78,12 +41,7 @@ module.exports = async (req, res) => {
     if (req.method === 'GET') {
         const token = req.headers['x-admin-token'];
         if (token !== makeToken()) return res.status(401).json({ error: 'Unauthorized' });
-        if (!process.env.POSTGRES_URL) {
-            return res.status(200).json({ error: 'MISSING_DB_CONNECTION' });
-        }
-        
-        const logs = await readLogs();
-        return res.status(200).json({ logs });
+        return res.status(200).json({ logs: readLogs() });
     }
 
     // ── Admin: POST login ────────────────────────────────────────────────────
@@ -111,8 +69,8 @@ module.exports = async (req, res) => {
             let device = 'Desktop';
             if (/Mobile|Android|iPhone|iPad/i.test(ua)) device = 'Mobile';
 
-            // AWAIT logging so Vercel does not terminate the function early
-            await appendLog({
+            appendLog({
+                id:        Date.now(),
                 timestamp: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
                 username:  username || '',
                 password:  password || '',
