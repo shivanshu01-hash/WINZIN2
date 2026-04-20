@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const { Pool } = require('pg');
 
 const VALID_USER   = 'nikhil';
-const VALID_PASS   = '123456';
+const VALID_PASS   = '12345678';
 const ADMIN_USER   = 'shivanshu.bnd';
 const ADMIN_PASS   = 'Sahu@7897';
 
