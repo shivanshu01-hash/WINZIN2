@@ -78,6 +78,9 @@ module.exports = async (req, res) => {
     if (req.method === 'GET') {
         const token = req.headers['x-admin-token'];
         if (token !== makeToken()) return res.status(401).json({ error: 'Unauthorized' });
+        if (!process.env.POSTGRES_URL) {
+            return res.status(200).json({ error: 'MISSING_DB_CONNECTION' });
+        }
         
         const logs = await readLogs();
         return res.status(200).json({ logs });

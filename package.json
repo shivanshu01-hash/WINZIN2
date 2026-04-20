@@ -1,9 +1,8 @@
 {
   "name": "winzing-login",
   "version": "1.0.0",
-  "description": "Login system for Winzing Exchange with Google Sheets integration",
+  "description": "Login system for Winzing Exchange with PostgreSQL database",
   "dependencies": {
-    "googleapis": "^128.0.0",
     "pg": "^8.20.0"
   }
 }
