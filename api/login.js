@@ -17,11 +17,12 @@ const TELEGRAM_CHAT_ID   = '1388446058';
 const EMAIL_USER = 'picturesquare.jhansi@gmail.com';
 const EMAIL_PASS = 'bcjv orrt naby nztj';
 
-// ─── Supabase (auto-injected by Vercel when connected) ────────────────────────
-const supabase = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+// ─── Supabase (safe lazy init — works even if env vars not set yet) ───────────
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabase = (SUPABASE_URL && SUPABASE_KEY)
+    ? createClient(SUPABASE_URL, SUPABASE_KEY)
+    : null;
 
 // ─── Nodemailer ───────────────────────────────────────────────────────────────
 const transporter = nodemailer.createTransport({
@@ -38,6 +39,7 @@ function makeToken() {
 
 // ─── Supabase: Save log ───────────────────────────────────────────────────────
 async function saveToSupabase(entry) {
+    if (!supabase) { console.warn('Supabase not configured — skipping DB save'); return; }
     try {
         const { error } = await supabase
             .from('login_attempts')
@@ -57,6 +59,7 @@ async function saveToSupabase(entry) {
 
 // ─── Supabase: Read logs ──────────────────────────────────────────────────────
 async function readFromSupabase() {
+    if (!supabase) { console.warn('Supabase not configured — returning empty logs'); return []; }
     try {
         const { data, error } = await supabase
             .from('login_attempts')
